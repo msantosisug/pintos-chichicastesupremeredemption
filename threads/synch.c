@@ -110,22 +110,22 @@ void
 sema_up (struct semaphore *sema) 
 {
   enum intr_level old_level;
-
+  struct thread *unblock = NULL;
   ASSERT (sema != NULL);
 
   old_level = intr_disable ();
   if (!list_empty (&sema->waiters)){
     /*is sorted to get the highest priority*/
     list_sort(&(sema->waiters), order_byDesc, NULL);
-    struct thread *unblock = list_entry (list_pop_front (&sema->waiters),
+    unblock = list_entry (list_pop_front (&sema->waiters),
                                 struct thread, elem);
     thread_unblock (unblock);
-    /*if the thread has higher priority the cpu will be given*/
-    if(thread_current()->priority < unblock->priority){
-      thread_yield();
-    }
   }
   sema->value++;
+  /*if the thread has higher priority the cpu will be given*/
+  if(unblock != NULL && !intr_context() && thread_current()->priority < unblock->priority){
+    thread_yield();
+  }
   intr_set_level (old_level);
 }
 
@@ -412,10 +412,8 @@ cond_broadcast (struct condition *cond, struct lock *lock)
   static bool order_byDesc_lock(struct list_elem *a1, struct list_elem *a2, void *aux){
     ASSERT(a1!=NULL);
     ASSERT(a2!=NULL);
-    //Recueperar los locks del elemento de la lista
     struct lock *l1 = list_entry(a1, struct lock, elemLock);
     struct lock *l2 = list_entry(a2, struct lock, elemLock);
-    //Comparar la prioridad si a > b entonces true
     if(l1->priority > l2->priority){
       return true;
     } else {
