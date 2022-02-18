@@ -667,8 +667,8 @@ void remove_sleeping_thread(int64_t ticks)
     }
   }
 
+  /*set priority thread by synch*/
   void thread_set_priority_bySynch(struct thread *t, int priority){
-
   struct thread* texcec;
   if(t == thread_current()){
     if(!list_empty(&ready_list)){
