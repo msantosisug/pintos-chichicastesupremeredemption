@@ -68,7 +68,8 @@ sema_down (struct semaphore *sema)
   old_level = intr_disable ();
   while (sema->value == 0) 
     {
-      list_push_back (&sema->waiters, &thread_current ()->elem);
+      /*the highest priority thread is ordered to wake up*/
+      list_insert_ordered(&sema->waiters, &thread_current()->elem, order_byDesc, NULL);
       thread_block ();
     }
   sema->value--;
@@ -113,9 +114,17 @@ sema_up (struct semaphore *sema)
   ASSERT (sema != NULL);
 
   old_level = intr_disable ();
-  if (!list_empty (&sema->waiters)) 
-    thread_unblock (list_entry (list_pop_front (&sema->waiters),
-                                struct thread, elem));
+  if (!list_empty (&sema->waiters)){
+    /*is sorted to get the highest priority*/
+    list_sort(&(sema->waiters), order_byDesc, NULL);
+    struct thread *unblock = list_entry (list_pop_front (&sema->waiters),
+                                struct thread, elem);
+    thread_unblock (unblock);
+    /*if the thread has higher priority the cpu will be given*/
+    if(thread_current()->priority < unblock->priority){
+      thread_yield();
+    }
+  }
   sema->value++;
   intr_set_level (old_level);
 }
@@ -178,6 +187,7 @@ lock_init (struct lock *lock)
   ASSERT (lock != NULL);
 
   lock->holder = NULL;
+  lock->priority = PRI_MIN;
   sema_init (&lock->semaphore, 1);
 }
 
@@ -195,9 +205,46 @@ lock_acquire (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
+  struct thread *t = thread_current();
+  struct thread *t_lock = lock->holder;
 
+  /*if lock not null set equal lock thread in the lock*/
+  if(t_lock == NULL){
+    lock->priority = t->priority;
+  }
+
+  // el thread esperara por este lock
+  t->lockWait = lock;
+
+  while(!thread_mlfqs && t_lock != NULL && t->priority > t_lock->priority){
+    // mientras la prioridad del thread actual sea mayor que la del thread que tiene el lock, donar
+    t_lock->priority = t->priority;
+
+    if(t->priority > lock->priority){
+
+      lock->priority = t->priority;
+      // se agrega esta verificacion, para ceder el procesador
+      verificar(lock, t->priority);
+
+    }
+
+    // si el thread que tiene el lock, ya no esta esperando por nadie, salir del ciclo
+    lock = t_lock->lockWait;
+    if(lock == NULL){
+      break;
+    } else {
+      // si esta esperando por alquien, threadLock recibe el thread que tiene el lock
+      t_lock = lock->holder;
+    }
+  }  
+  
   sema_down (&lock->semaphore);
   lock->holder = thread_current ();
+
+  if(!thread_mlfqs){
+    lock->holder->lockWait = NULL;
+    list_insert_ordered(&(lock->holder->lockList), &(lock->elemLock), order_byDesc_lock, NULL);
+  }
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -233,6 +280,23 @@ lock_release (struct lock *lock)
 
   lock->holder = NULL;
   sema_up (&lock->semaphore);
+  if(!thread_mlfqs){
+    struct thread *t = thread_current();
+    /*quit lock of list*/
+    list_remove(&lock->elemLock);
+    if(list_empty(&t->lockList)){
+      t->priority = t->priorityDon;
+      /*gives the cpu if necessary*/
+      thread_set_priority_bySynch(t, t->priority);
+    } else {
+      /*order by list to highest priority*/
+      list_sort(&(t->lockList), order_byDesc_lock, NULL);
+      struct lock *Lexec = list_entry(list_front(&(t->lockList)), struct lock, elemLock);
+      t->priority = Lexec->priority;
+      /*gives the cpu if necessary*/
+      thread_set_priority_bySynch(t, Lexec->priority);
+    }
+  }
 }
 
 /* Returns true if the current thread holds LOCK, false
@@ -336,3 +400,30 @@ cond_broadcast (struct condition *cond, struct lock *lock)
   while (!list_empty (&cond->waiters))
     cond_signal (cond, lock);
 }
+
+/*function sort desc */
+  static bool order_byDesc(struct list_elem *a1, struct list_elem *a2, void *aux){
+    ASSERT(a1!=NULL);
+    ASSERT(a2!=NULL);
+    struct thread *t1 = list_entry(a1, struct thread, elem);
+    struct thread *t2 = list_entry(a2, struct thread, elem);
+    if(t1->priority > t2->priority){
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  /*function sort desc lock*/
+  static bool order_byDesc_lock(struct list_elem *a1, struct list_elem *a2, void *aux){
+    ASSERT(a1!=NULL);
+    ASSERT(a2!=NULL);
+    //Recueperar los locks del elemento de la lista
+    struct lock *l1 = list_entry(a1, struct lock, elemLock);
+    struct lock *l2 = list_entry(a2, struct lock, elemLock);
+    //Comparar la prioridad si a > b entonces true
+    if(l1->priority > l2->priority){
+      return true;
+    } else {
+      return false;
+    }
