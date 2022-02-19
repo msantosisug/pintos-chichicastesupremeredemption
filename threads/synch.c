@@ -208,30 +208,36 @@ lock_acquire (struct lock *lock)
   struct thread *t = thread_current();
   struct thread *t_lock = lock->holder;
 
-  /*wait for lock*/
-  t->lockWait = lock;
-
   /*if lock not null set equal lock thread in the lock*/
   if(t_lock == NULL){
     lock->priority = t->priority;
   }
 
+  // el thread esperara por este lock
+  t->lockWait = lock;
+
   while(!thread_mlfqs && t_lock != NULL && t->priority > t_lock->priority){
+    // mientras la prioridad del thread actual sea mayor que la del thread que tiene el lock, donar
     t_lock->priority = t->priority;
+
     if(t->priority > lock->priority){
+
       lock->priority = t->priority;
-      /*gives the cpu if necessary*/
-      thread_set_priority_bySynch(lock, t->priority);
+      // se agrega esta verificacion, para ceder el procesador
+      verificar(lock, t->priority);
+
     }
-    /*if not lockwait exit*/
+
+    // si el thread que tiene el lock, ya no esta esperando por nadie, salir del ciclo
     lock = t_lock->lockWait;
     if(lock == NULL){
       break;
     } else {
-      /*gives threds lock*/
+      // si esta esperando por alquien, threadLock recibe el thread que tiene el lock
       t_lock = lock->holder;
     }
   }  
+  
   sema_down (&lock->semaphore);
   lock->holder = thread_current ();
 
@@ -421,4 +427,3 @@ cond_broadcast (struct condition *cond, struct lock *lock)
     } else {
       return false;
     }
-  }
