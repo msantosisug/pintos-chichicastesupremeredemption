@@ -602,7 +602,7 @@ void insert_thread_waiting_list(int64_t ticks)
 }
 
 /* function that iterates through the waiting list of threads and 
-  starts the threads running*/
+  starts the threads running - minimun changes */
 void remove_sleeping_thread(int64_t ticks)
 {
 
