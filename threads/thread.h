@@ -151,7 +151,4 @@ int thread_get_load_avg(void);
  /*function sort desc */
 static bool order_byDesc(struct list_elem *a1, struct list_elem *a2, void *aux);
 
-/*set priority thread by synch*/
-void thread_set_priority_bySynch(struct thread *t, int priority);
-
 #endif /* threads/thread.h */
