@@ -90,12 +90,13 @@ void timer_sleep(int64_t ticks)
 
   ASSERT(intr_get_level() == INTR_ON);
   //------------------------------------------------------------
-  // commented out line because it does not guarantee that sleeping 
-  // threads are scheduled back to the processor when they are to be 
+  // commented out line because it does not guarantee that sleeping
+  // threads are scheduled back to the processor when they are to be
   // run
   /*while (timer_elapsed(start) < ticks)
     thread_yield();*/
-  insert_thread_waiting_list(ticks);
+  if (ticks > 0)
+    insert_thread_waiting_list(ticks);
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -172,6 +173,26 @@ timer_interrupt(struct intr_frame *args UNUSED)
   // remove threads when time is up
   remove_sleeping_thread(ticks);
   //------------------------------------------------------
+
+  if (thread_mlfqs)
+  {
+    update_current_recent_cpu();
+
+    if (ticks % TIMER_FREQ == 0)
+    {
+      update_load_avg();
+      enum intr_level old_level = intr_disable();
+      thread_foreach(update_recent_cpu_thread, NULL);
+      intr_set_level(old_level);
+    }
+    if (ticks % 4 == 0)
+    {
+      enum intr_level old_level = intr_disable();
+      thread_foreach(updated_priority_thread, NULL);
+      intr_set_level(old_level);
+      order_ready_list();
+    }
+  }
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
