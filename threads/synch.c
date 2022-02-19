@@ -123,7 +123,7 @@ sema_up (struct semaphore *sema)
   }
   sema->value++;
   /*if the thread has higher priority the cpu will be given*/
-  if(thread_current()->priority < unblock->priority){
+  if(unblock != NULL && !intr_context() && thread_current()->priority < unblock->priority){
     thread_yield();
   }
   intr_set_level (old_level);
@@ -216,7 +216,7 @@ lock_acquire (struct lock *lock)
     lock->priority = t->priority;
   }
 
-  while(t_lock != NULL && t->priority > t_lock->priority){
+  while(!thread_mlfqs && t_lock != NULL && t->priority > t_lock->priority){
     t_lock->priority = t->priority;
     if(t->priority > lock->priority){
       lock->priority = t->priority;
@@ -235,9 +235,10 @@ lock_acquire (struct lock *lock)
   sema_down (&lock->semaphore);
   lock->holder = thread_current ();
 
-  lock->holder->lockWait = NULL;
-  list_insert_ordered(&(lock->holder->lockList), &(lock->elemLock), order_byDesc_lock, NULL);
-  
+  if(!thread_mlfqs){
+    lock->holder->lockWait = NULL;
+    list_insert_ordered(&(lock->holder->lockList), &(lock->elemLock), order_byDesc_lock, NULL);
+  }
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -273,20 +274,22 @@ lock_release (struct lock *lock)
 
   lock->holder = NULL;
   sema_up (&lock->semaphore);
-  struct thread *t = thread_current();
-  /*quit lock of list*/
-  list_remove(&lock->elemLock);
-  if(list_empty(&t->lockList)){
-    t->priority = t->priorityDon;
-    /*gives the cpu if necessary*/
-    thread_set_priority_bySynch(t, t->priority);
-  } else {
-    /*order by list to highest priority*/
-    list_sort(&(t->lockList), order_byDesc_lock, NULL);
-    struct lock *Lexec = list_entry(list_front(&(t->lockList)), struct lock, elemLock);
-    t->priority = Lexec->priority;
-    /*gives the cpu if necessary*/
-    thread_set_priority_bySynch(t, Lexec->priority);
+  if(!thread_mlfqs){
+    struct thread *t = thread_current();
+    /*quit lock of list*/
+    list_remove(&lock->elemLock);
+    if(list_empty(&t->lockList)){
+      t->priority = t->priorityDon;
+      /*gives the cpu if necessary*/
+      thread_set_priority_bySynch(t, t->priority);
+    } else {
+      /*order by list to highest priority*/
+      list_sort(&(t->lockList), order_byDesc_lock, NULL);
+      struct lock *Lexec = list_entry(list_front(&(t->lockList)), struct lock, elemLock);
+      t->priority = Lexec->priority;
+      /*gives the cpu if necessary*/
+      thread_set_priority_bySynch(t, Lexec->priority);
+    }
   }
 }
 
