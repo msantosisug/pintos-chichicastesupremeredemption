@@ -88,7 +88,6 @@ struct thread
    char name[16];             /* Name (for debugging purposes). */
    uint8_t *stack;            /* Saved stack pointer. */
    int priority;              /* Priority. */
-   int priorityDon;              /* Priority utils to donation. */
    struct list_elem allelem;  /* List element for all threads list. */
 
    /* Shared between thread.c and synch.c. */
@@ -98,8 +97,6 @@ struct thread
    // our variables declarations
    //---------------------------------------------------------
    uint16_t sleeping_time; /*time the thread stays asleep*/
-   struct lock *lockWait;  /*wait for lock*/
-   struct list *lockList;  /*list locks in thread*/
 
 #ifdef USERPROG
    /* Owned by userprog/process.c. */
@@ -147,8 +144,5 @@ int thread_get_nice(void);
 void thread_set_nice(int);
 int thread_get_recent_cpu(void);
 int thread_get_load_avg(void);
-
- /*function sort desc */
-static bool order_byDesc(struct list_elem *a1, struct list_elem *a2, void *aux);
 
 #endif /* threads/thread.h */

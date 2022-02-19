@@ -206,11 +206,6 @@ tid_t thread_create(const char *name, int priority,
   /* Add to run queue. */
   thread_unblock(t);
 
-  /*if the priority of the current thread is less than the priority of the new thread the new thread must give up the CPU*/
-  if(thread_current()->priority < priority) {
-    thread_yield();
-  }
-
   return tid;
 }
 
@@ -245,8 +240,7 @@ void thread_unblock(struct thread *t)
 
   old_level = intr_disable();
   ASSERT(t->status == THREAD_BLOCKED);
-  /*order by priority in ready list*/
-  list_insert_ordered(&ready_list, &t->elem, order_byDesc, NULL);
+  list_push_back(&ready_list, &t->elem);
   t->status = THREAD_READY;
   intr_set_level(old_level);
 }
@@ -314,8 +308,7 @@ void thread_yield(void)
 
   old_level = intr_disable();
   if (cur != idle_thread)
-    /*order by priority in ready list*/
-    list_insert_ordered(&ready_list, &cur->elem, order_byDesc, NULL);
+    list_push_back(&ready_list, &cur->elem);
   cur->status = THREAD_READY;
   schedule();
   intr_set_level(old_level);
@@ -340,24 +333,7 @@ void thread_foreach(thread_action_func *func, void *aux)
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void thread_set_priority(int new_priority)
 {
-  struct thread *t = thread_current();
-  /*there is no donation if both priorities are the same, otherwise don is updated*/
-  if(t->priority == t->priorityDon){
-    t->priority = new_priority;
-    t->priorityDon = new_priority;
-  } else {
-    t->priorityDon = new_priority;
-  }
-  /*you get the next thread to run*/
-  if(!list_empty(&ready_list)){
-    struct thread *texec = list_entry(list_begin(&ready_list), struct thread, elem);
-    if(texec != NULL){
-      /*gives up the cpu whenever it is of higher priority*/
-      if (texec->priority > new_priority) {
-        thread_yield();
-      }
-    }
-  }
+  thread_current()->priority = new_priority;
 }
 
 /* Returns the current thread's priority. */
@@ -483,7 +459,6 @@ init_thread(struct thread *t, const char *name, int priority)
   strlcpy(t->name, name, sizeof t->name);
   t->stack = (uint8_t *)t + PGSIZE;
   t->priority = priority;
-  t->priorityDon = priority;
   t->magic = THREAD_MAGIC;
 
   old_level = intr_disable();
@@ -653,32 +628,4 @@ void remove_sleeping_thread(int64_t ticks)
       iter = list_next(iter);
     }
   }
-}
-  /*function sort desc */
-  static bool order_byDesc(struct list_elem *a1, struct list_elem *a2, void *aux){
-    ASSERT(a1!=NULL);
-    ASSERT(a2!=NULL);
-    struct thread *t1 = list_entry(a1, struct thread, elem);
-    struct thread *t2 = list_entry(a2, struct thread, elem);
-    if(t1->priority > t2->priority){
-      return true;
-    } else {
-      return false;
-    }
-  }
-
-  void thread_set_priority_bySynch(struct thread *t, int priority){
-
-  struct thread* texcec;
-  if(t == thread_current()){
-    if(!list_empty(&ready_list)){
-      /*you get the next thread to run*/
-      texcec = list_entry(list_begin(&ready_list), struct thread, elem);
-      /*gives up the cpu whenever it is of higher priority*/
-      if(texcec != NULL && texcec->priority > priority){
-          thread_yield();
-      }
-    }
-  }
-  
 }
